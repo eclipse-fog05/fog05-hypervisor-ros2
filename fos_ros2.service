@@ -1,0 +1,14 @@
+[unit]
+Description = Eclipse fog05 ROS2 Plugin
+After=network.target
+
+
+[Service]
+Type=simple
+PIDFile=/var/fos/ros2.pid
+ExecStart = /etc/fos/plugins/plugin-fdu-ros2/ros2_plugin /etc/fos/plugins/plugin-fdu-ros2/ros2_plugin.json
+KillMode=process
+Restart=on-failure
+User=fos
+[Install]
+WantedBy=multi-user.target
