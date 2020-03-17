@@ -251,6 +251,7 @@ class ROS2(RuntimePluginFDU):
             self.logger.info('run_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
             fdu_uuid = fdu.get_fdu_id()
 
+            # Creating sh file and starting using Popen
             app_template =  self.os.read_file(os.path.join(self.DIR, 'templates', 'app.sh'))
             app_sh = Environment().from_string(app_template)
             app_sh = app_sh.render(ros_distro=self.ros_distro,rmw=self.rmw,id=fdu_uuid)
@@ -259,7 +260,7 @@ class ROS2(RuntimePluginFDU):
             chmod_cmd = 'chmod +x {}'.format(path)
             self.os.execute_command(chmod_cmd, blocking=True, external=False)
             cmd = '{} {} {} {} {}'.format(path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
-            outfile = open(os.path.join(fdu.outfile),'w')
+            outfile = open(fdu.outfile,'w')
             p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,executable='/bin/bash')
             fdu.on_start(p.pid)
 
@@ -282,7 +283,9 @@ class ROS2(RuntimePluginFDU):
         else:
             fdu_uuid = fdu.get_fdu_id()
 
+            # sending sigint to the process
             self.os.send_sig_int(fdu.pid)
+
             fdu.on_stop()
             self.current_fdus.update({instance_uuid: fdu})
             self.update_fdu_status(fdu_uuid, instance_uuid, 'CONFIGURE')
