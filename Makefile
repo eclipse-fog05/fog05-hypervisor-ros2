@@ -19,13 +19,13 @@ ifeq "$(wildcard $(ROS2_PLUGIN_DIR))" ""
 	mkdir -p $(ROS2_PLUGIN_DIR)
 	sudo cp -r ./templates $(ROS2_PLUGIN_DIR)
 	sudo cp ./ros2_plugin $(ROS2_PLUGIN_DIR)
-	sudo cp ./Ros2FDU.py $(ROS2_PLUGIN_DIR)
+	sudo cp ./ROS2FDU.py $(ROS2_PLUGIN_DIR)
 	sudo cp ./README.md $(ROS2_PLUGIN_DIR)
 	sudo cp ./ros2_plugin.json $(PLUGIN_CONF)
 else
 	sudo cp -r ./templates $(ROS2_PLUGIN_DIR)
 	sudo cp ./ros2_plugin $(ROS2_PLUGIN_DIR)
-	sudo cp ./Ros2FDU.py $(ROS2_PLUGIN_DIR)
+	sudo cp ./ROS2FDU.py $(ROS2_PLUGIN_DIR)
 	sudo cp ./README.md $(ROS2_PLUGIN_DIR)
 endif
 	sudo cp ./fos_ros2.service $(SYSTEMD_DIR)
