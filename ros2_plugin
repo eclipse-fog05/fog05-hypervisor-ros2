@@ -112,8 +112,8 @@ class ROS2(RuntimePluginFDU):
 
     def define_fdu(self, fdu_record):
 
-        # HERE Should get the descriptor to retrieve the name, app name is crucial in ros2 run ---
-        fdu = ROS2FDU(fdu_record, '', os.path.join(self.BASE_DIR, self.LOG_DIR, 'out_{}'.format(fdu_record.get('uuid'))))
+        desc = self.agent.get_fdu_descriptor(fdu_record.get('fdu_uuid'))
+        fdu = ROS2FDU(fdu_record, desc.get('name'), os.path.join(self.BASE_DIR, self.LOG_DIR, 'out_{}'.format(fdu_record.get('uuid'))))
         fdu_uuid = fdu.get_fdu_id()
         instance_id = fdu.get_uuid()
 
