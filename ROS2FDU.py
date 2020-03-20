@@ -19,7 +19,7 @@ from fog05_sdk.interfaces.InfraFDU import InfraFDU
 
 class ROS2FDU(InfraFDU):
     def __init__(self, data, name, outfile):
-        super(ROS2FDU, self).__init__(data, name, outfile)
+        super(ROS2FDU, self).__init__(data)
 
         self.name = name
         self.app_path = self.image.get('uri')
