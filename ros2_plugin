@@ -172,10 +172,7 @@ class ROS2(RuntimePluginFDU):
             fdu_uuid = fdu.get_fdu_id()
             self.logger.info('undefine_fdu()', ' ROS2 Plugin - Instances of {} are {}'.format(fdu_uuid, self.get_local_instances(fdu_uuid)))
 
-            path_build = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid, 'build_{}.sh'.format(instance_uuid))
-            path_run = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid, 'run_{}.sh'.format(instance_uuid))
-            self.os.remove_file(path_build)
-            self.os.remove_file(path_run)
+
 
             if len(self.get_local_instances(fdu_uuid)) == 1:
                 self.os.remove_dir(os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid))
@@ -233,6 +230,11 @@ class ROS2(RuntimePluginFDU):
         else:
             fdu_uuid = fdu.get_fdu_id()
             self.os.remove_file(fdu.outfile)
+
+            path_build = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid, 'build_{}.sh'.format(instance_uuid))
+            path_run = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid, 'run_{}.sh'.format(instance_uuid))
+            self.os.remove_file(path_build)
+            self.os.remove_file(path_run)
 
             # Should remove from fdu.app_path the folders build install and log
             self.logger.info('clean_fdu()','ROS2 Plugin - Removing {}'.format(os.path.join(fdu.app_path,'build')))
