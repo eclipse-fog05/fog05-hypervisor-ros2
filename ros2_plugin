@@ -349,11 +349,20 @@ class ROS2(RuntimePluginFDU):
             else:
                 self.logger.info('__fdu_observer()', ' ROS2 Plugin - Action not recognized : {}'.format(action))
         except FDUNotExistingException as nex:
+            self.logger.error('__fdu_observer()', ' ROS2 Plugin - Error : {}'.format(nex))
             self.write_fdu_error(fdu_info.get('fdu_uuid'), fdu_uuid, 9, nex)
             time.sleep(10)
             self.connector.loc.actual.remove_node_fdu(self.node, self.uuid, fdu_info.get('fdu_uuid'), fdu_uuid)
             return
         except StateTransitionNotAllowedException as stna:
+            self.logger.error('__fdu_observer()', ' ROS2 Plugin - Error : {}'.format(stna))
+            self.write_fdu_error(fdu_info.get('fdu_uuid'), fdu_uuid, 10, stna)
+            time.sleep(5)
+            fdu = self.current_fdus.get(fdu_uuid)
+            self.update_fdu_status(fdu_info.get('fdu_uuid'), fdu_uuid,fdu.status)
+            return
+        except Exception as e:
+            self.logger.error('__fdu_observer()', ' ROS2 Plugin - Error : {}'.format(e))
             self.write_fdu_error(fdu_info.get('fdu_uuid'), fdu_uuid, 10, stna)
             time.sleep(5)
             fdu = self.current_fdus.get(fdu_uuid)
