@@ -18,7 +18,7 @@ from fog05_sdk.interfaces.States import State
 from fog05_sdk.interfaces.InfraFDU import InfraFDU
 
 class ROS2FDU(InfraFDU):
-    def __init__(self, data):
+    def __init__(self, data, name, outfile):
         super(ROS2FDU, self).__init__(data, name, outfile)
 
         self.name = name
