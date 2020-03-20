@@ -41,6 +41,9 @@ class ROS2FDU(InfraFDU):
             self.cmd = command.get('binary')
             self.args = command.get('args')
 
+    def set_app_path(self, app_path):
+        self.app_path = app_path
+
     def on_defined(self):
         self.set_status(State.DEFINED)
 
