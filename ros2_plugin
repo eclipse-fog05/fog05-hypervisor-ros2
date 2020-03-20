@@ -144,7 +144,7 @@ class ROS2(RuntimePluginFDU):
 
             if zip_file.endswith('tar.gz'):
                 unzip_cmd = 'tar -zxvf {} -C {}'.format(zip_file, dest)
-                fdu.set_app_path(dest)
+                fdu.set_app_path(os.path.join(dest,desc.get('name')))
                 self.os.execute_command(unzip_cmd, blocking=True, external=True)
             else:
                 raise ValueError("ROS2 Application can be only packaged as .tar.gz")
