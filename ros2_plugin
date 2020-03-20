@@ -204,7 +204,7 @@ class ROS2(RuntimePluginFDU):
             self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'build_{}.sh'.format(instance_uuid) )
             chmod_cmd = 'chmod +x {}'.format(path)
             self.os.execute_command(chmod_cmd, blocking=True, external=False)
-            self.os.execute_command('{} {} {}'.format(path, fdu.app_path, fdu.name), blocking=True, external=False)
+            self.os.execute_command('{} {} {}'.format(path, fdu.app_path, fdu.name), blocking=True, external=True)
             #
 
 
