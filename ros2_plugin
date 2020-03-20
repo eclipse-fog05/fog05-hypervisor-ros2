@@ -177,7 +177,7 @@ class ROS2(RuntimePluginFDU):
             self.os.remove_file(path_build)
             self.os.remove_file(path_run)
 
-            if self.get_local_instances(fdu_uuid) == 1:
+            if len(self.get_local_instances(fdu_uuid)) == 1:
                 self.os.remove_dir(os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid))
 
             self.current_fdus.pop(instance_uuid, None)
@@ -235,6 +235,9 @@ class ROS2(RuntimePluginFDU):
             self.os.remove_file(fdu.outfile)
 
             # Should remove from fdu.app_path the folders build install and log
+            self.logger.info('clean_fdu()','ROS2 Plugin - Removing {}'.format(os.path.join(fdu.app_path,'build')))
+            self.logger.info('clean_fdu()','ROS2 Plugin - Removing {}'.format(os.path.join(fdu.app_path,'install')))
+            self.logger.info('clean_fdu()','ROS2 Plugin - Removing {}'.format(os.path.join(fdu.app_path,'log')))
             self.os.remove_dir(os.path.join(fdu.app_path,'build'))
             self.os.remove_dir(os.path.join(fdu.app_path,'install'))
             self.os.remove_dir(os.path.join(fdu.app_path,'log'))
