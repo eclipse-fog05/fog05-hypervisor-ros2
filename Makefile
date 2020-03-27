@@ -32,7 +32,7 @@ else
 	sudo cp ./ROS2FDU.py $(ROS2_PLUGIN_DIR)
 	sudo cp ./README.md $(ROS2_PLUGIN_DIR)
 endif
-	sudo ln -sf $(ROS2_PLUGIN_DIR)/utils/containerize $(BIN_DIR)/fos_ros_isolate
+	sudo ln -sf $(ROS2_PLUGIN_DIR)/utils/isolate $(BIN_DIR)/fos_ros_isolate
 	sudo cp ./fos_ros2.service $(SYSTEMD_DIR)
 	sudo sh -c "echo $(UUID) | xargs -i  jq  '.configuration.nodeid = \"{}\"' $(PLUGIN_CONF) > /tmp/ros2_plugin.tmp && mv /tmp/ros2_plugin.tmp $(PLUGIN_CONF)"
 

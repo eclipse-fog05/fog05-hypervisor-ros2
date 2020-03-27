@@ -22,6 +22,7 @@ import json
 import time
 import signal
 import traceback
+import random
 from fog05_sdk.interfaces.States import State
 from fog05_sdk.interfaces.RuntimePluginFDU import *
 from fog05_sdk import Yaks_Connector
@@ -206,10 +207,13 @@ class ROS2(RuntimePluginFDU):
             self.os.execute_command(chmod_cmd, blocking=True, external=False)
             self.os.execute_command('{} {} {}'.format(path, fdu.app_path, fdu.name), blocking=True, external=True)
             #
+            self.logger.info('configure_fdu()', 'After build ')
 
             # creating network namespace
             netns = self.nm.create_network_namespace()
             fdu.namespace = netns
+
+            self.logger.info('configure_fdu()', 'Created ns')
 
             # creating connection points
             for cp in fdu.get_connection_points():
@@ -327,6 +331,17 @@ class ROS2(RuntimePluginFDU):
             self.os.remove_dir(os.path.join(fdu.app_path,'install'))
             self.os.remove_dir(os.path.join(fdu.app_path,'log'))
 
+
+            for i in fdu.virtual_interfaces:
+                if i.get('external') is not None:
+                    self.nm.detach_interface_from_bridge(i.get('external').get('name'))
+                self.nm.delete_virtual_interface_from_namespace(i.get('internal').get('name'), fdu.namespace)
+
+            for cp in fdu.instance_cps:
+                self.nm.remove_connection_point(cp.get('uuid'))
+
+            self.nm.delete_network_namespace(fdu.namespace)
+
             fdu.on_clean()
             self.current_fdus.update({instance_uuid: fdu})
             self.update_fdu_status(fdu_uuid, instance_uuid, 'DEFINE')
@@ -357,7 +372,7 @@ class ROS2(RuntimePluginFDU):
             self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
             chmod_cmd = 'chmod +x {}'.format(path)
             self.os.execute_command(chmod_cmd, blocking=True, external=False)
-            cmd = 'fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
+            cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
             outfile = open(fdu.outfile,'w')
             p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,executable='/bin/bash')
             fdu.on_start(p.pid)
@@ -507,6 +522,14 @@ class ROS2(RuntimePluginFDU):
                 self.undefine_fdu(fdu_uuid)
             if fdu.get_status() == State.DEFINED:
                 self.undefine_fdu(fdu_uuid)
+
+    def __generate_random_mac(self):
+        d = [ 0x00, 0x16,
+            random.randint(0x00, 0x7f),
+            random.randint(0x00, 0x7f),
+            random.randint(0x00, 0xff),
+            random.randint(0x00, 0xff) ]
+        return ':'.join(map(lambda x: "%02x" % x, d))
 
 
 def read_file(file_path):
