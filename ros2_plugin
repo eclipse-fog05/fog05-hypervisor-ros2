@@ -207,6 +207,89 @@ class ROS2(RuntimePluginFDU):
             self.os.execute_command('{} {} {}'.format(path, fdu.app_path, fdu.name), blocking=True, external=True)
             #
 
+            # creating network namespace
+            netns = self.nm.create_network_namespace()
+            fdu.namespace = netns
+
+            # creating connection points
+            for cp in fdu.get_connection_points():
+                    cp_record = self.nm.create_connection_point(cp)
+                    if cp_record.get('vld_ref') is not None:
+                        vld = cp_record.get('vld_ref')
+                        self.nm.connect_cp_to_vnetwork(cp_record.get('uuid'), vld)
+                    fdu.instance_cps.append(cp_record)
+
+            # creating virtual interfaces
+            for intf in fdu.get_interfaces():
+                intf_name = intf.get('vintf_name')
+                self.logger.info('configure_fdu()','Interface Info {}'.format(intf))
+
+                if intf.get('virtual_interface').get('intf_type').upper() in ['PHYSICAL','BRIDGED']:
+
+                    real_intf_name = intf.get('phy_face', None)
+                    if real_intf_name is None:
+                        raise ValueError("phy_face cannot be none")
+                    if self.os.get_intf_type(real_intf_name) in ['ethernet']:
+                        self.logger.error('configure_fdu()', 'ROS2 FDU Plugin - Creating macvlan interface')
+                        mac = intf.get('mac_address', self.__generate_random_mac())
+                        intf.update({'mac_address': mac})
+
+                        macvlan_temp_name = self.nm.create_macvlan_interface(real_intf_name)
+                        self.nm.move_interface_in_namespace(macvlan_temp_name, fdu.namespace)
+                        self.nm.assign_mac_address_to_interface_in_namespace(macvlan_temp_name, fdu.namespace, mac)
+                        self.nm.rename_virtual_interface_in_namespace(macvlan_temp_name, intf_name, fdu.namespace)
+                        intf_info = self.nm.assign_address_to_interface_in_namespace(intf_name, fdu.namespace)
+
+                        fdu.virtual_interfaces.append({'internal':intf_info.get('internal'), 'external':None})
+
+                    elif self.os.get_intf_type(real_intf_name) in ['wireless']:
+                        self.logger.error('configure_fdu()', 'ROS2 FDU Plugin - Creating moving wireless interface to namespace')
+                        intf_info = self.nm.move_interface_in_namespace(real_intf_name, fdu.namespace)
+                        self.nm.rename_virtual_interface_in_namespace(real_intf_name, intf_name, fdu.namespace)
+                        intf_info.update({"name":intf_name})
+                        fdu.virtual_interfaces.append({'internal':intf_info, 'external':None})
+
+                    else:
+                        mac = intf.get('mac_address', self.__generate_random_mac())
+                        intf.update({'mac_address': mac})
+                        # create interface
+                        intf_info = self.nm.create_virtual_interface_in_namespace(intf_name, fdu.namespace)
+                        self.logger.info('configure_fdu()','Created interface {}'.format(intf_info))
+                         # attaching external face to bridge
+                        res = self.nm.attach_interface_to_bridge(intf_info.get('external').get('name'),real_intf_name)
+                        self.logger.info('configure_fdu()','Attached to bridge interface {}'.format(res))
+                        # assigning mac address
+                        res = self.nm.assign_mac_address_to_interface_in_namespace(intf_name, fdu.namespace, mac)
+                        self.logger.info('configure_fdu()','Assigned MAC to interface {}'.format(res))
+                        # assign ip address
+                        self.nm.assign_address_to_interface_in_namespace(intf_name, fdu.namespace)
+                        self.logger.info('configure_fdu()','Assigned IP to interface {}'.format(res))
+
+                        # adding to the list of interfaces
+                        fdu.virtual_interfaces.append({'internal':intf_info.get('internal'), 'external':intf_info.get('external')})
+                else:
+                    self.logger.error('configure_fdu()', 'ROS2 FDU Plugin creating interface attached to connection point')
+                    mac = intf.get('mac_address', self.__generate_random_mac())
+                    intf.update({'mac_address': mac})
+                    intf_info = self.nm.create_virtual_interface_in_namespace(intf_name, fdu.namespace)
+                    self.logger.info('configure_fdu()','Created interface {}'.format(intf_info))
+                    res = self.nm.assign_mac_address_to_interface_in_namespace(intf_name, fdu.namespace, mac)
+
+                    if intf.get('cp_id') is not None:
+                        cp_id = intf.get('cp_id')
+                        cp = [x for x in fdu.instance_cps if x.get('cp_id') == cp_id]
+                        if len(cp) > 0:
+                            cp = cp[0]
+                            res = self.nm.attach_interface_to_bridge(intf_info.get('external').get('name'),cp.get('br_name'))
+                            self.logger.info('configure_fdu()','Attached to bridge interface {}'.format(res))
+                            self.nm.assign_address_to_interface_in_namespace(intf_name, fdu.namespace)
+                            self.logger.info('configure_fdu()','Assigned IP to interface {}'.format(res))
+                        else:
+                            self.logger.error('configure_fdu','ROS2 FDU Plugin unable to find connection point {} for interface {}'.format(cp_id, intf_name))
+                    else:
+                        self.logger.error('configure_fdu','ROS2 FDU Plugin interface {} is not connected to anything'.format(intf_name))
+
+                    fdu.virtual_interfaces.append({'internal':intf_info.get('internal'), 'external':intf_info.get('external')})
 
             fdu.on_configured()
 
@@ -270,10 +353,11 @@ class ROS2(RuntimePluginFDU):
             app_sh = Environment().from_string(app_template)
             app_sh = app_sh.render(ros_distro=self.ros_distro,rmw=self.rmw,id=fdu_uuid)
             path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'run_{}.sh'.format(instance_uuid))
+            child_pid_path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'child_{}.pid'.format(instance_uuid))
             self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
             chmod_cmd = 'chmod +x {}'.format(path)
             self.os.execute_command(chmod_cmd, blocking=True, external=False)
-            cmd = '{} {} {} {} {}'.format(path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
+            cmd = 'fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
             outfile = open(fdu.outfile,'w')
             p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,executable='/bin/bash')
             fdu.on_start(p.pid)
@@ -298,7 +382,9 @@ class ROS2(RuntimePluginFDU):
             fdu_uuid = fdu.get_fdu_id()
 
             # sending sigint to the process
-            self.os.send_sig_int(fdu.pid)
+            # self.os.send_sig_int(fdu.pid)
+            cmd = 'sudo pkill -2 -P {}'.format(fdu.pid)
+            self.os.execute_command(cmd, blocking=True, external=False)
 
             fdu.on_stop()
             self.current_fdus.update({instance_uuid: fdu})

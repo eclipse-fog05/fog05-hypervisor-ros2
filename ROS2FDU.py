@@ -33,6 +33,10 @@ class ROS2FDU(InfraFDU):
             raise ValueError("Command cannot be None for ROS2 application")
 
         self.outfile = outfile
+
+        self.namespace = None
+        self.virtual_interfaces = []
+        self.instance_cps = []
         self.pid = -1
 
     def set_cmd(self, command):
