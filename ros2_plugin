@@ -30,7 +30,8 @@ from ROS2FDU import ROS2FDU
 from jinja2 import Environment
 from fog05_sdk.DLogger import DLogger
 from mvar import MVar
-
+from subprocess import PIPE
+from functools import partial
 
 class ROS2(RuntimePluginFDU):
 
@@ -301,6 +302,26 @@ class ROS2(RuntimePluginFDU):
 
             self.current_fdus.update({instance_uuid: fdu})
             self.update_fdu_status(fdu_uuid, instance_uuid, 'CONFIGURE')
+
+
+            self.logger.info('configure_fdu()', '[ INFO ] ROS2 Plugin - Registreting blocking start/run/log/ls/file evals for {}'.format(instance_uuid))
+            start_fun  = partial(self.start_fdu, instance_uuid)
+            run_fun  = partial(self.run_fdu, instance_uuid)
+            log_fun  = partial(self.get_log_fdu, instance_uuid)
+            ls_fun  = partial(self.get_ls_fdu, instance_uuid)
+            file_fun  = partial(self.get_file_fdu, instance_uuid)
+
+            try:
+                self.connector.loc.actual.add_plugin_fdu_start_eval(self.node, self.uuid, fdu_uuid, instance_uuid, start_fun)
+                self.connector.loc.actual.add_plugin_fdu_run_eval(self.node, self.uuid, fdu_uuid, instance_uuid, run_fun)
+                self.connector.loc.actual.add_plugin_fdu_log_eval(self.node, self.uuid, fdu_uuid, instance_uuid, log_fun)
+                self.connector.loc.actual.add_plugin_fdu_ls_eval(self.node, self.uuid, fdu_uuid, instance_uuid, ls_fun)
+                self.connector.loc.actual.add_plugin_fdu_file_eval(self.node, self.uuid, fdu_uuid, instance_uuid, file_fun)
+            except Exception as e:
+                self.logger.error('configure_fdu()', '[ ERRO ] ROS2 Plugin - Error in registering start/run/log/ls/file function: {}'.format(e))
+                traceback.print_exc()
+
+
             self.logger.info('configure_fdu()', '[ DONE ] ROS2 Plugin - Configure ROS2 App FDU uuid {}'.format(instance_uuid))
 
     def clean_fdu(self, instance_uuid):
@@ -345,42 +366,112 @@ class ROS2(RuntimePluginFDU):
             fdu.on_clean()
             self.current_fdus.update({instance_uuid: fdu})
             self.update_fdu_status(fdu_uuid, instance_uuid, 'DEFINE')
+
+
+
+            self.logger.info('configure_fdu()', '[ INFO ] ROS2 Plugin - Unregistering blocking start/run/log/ls/file evals for {}'.format(instance_uuid))
+            self.connector.loc.actual.remove_plugin_fdu_start_eval(self.node, self.uuid, fdu_uuid, instance_uuid)
+            self.connector.loc.actual.remove_plugin_fdu_run_eval(self.node, self.uuid, fdu_uuid, instance_uuid)
+            self.connector.loc.actual.remove_plugin_fdu_log_eval(self.node, self.uuid, fdu_uuid, instance_uuid)
+            self.connector.loc.actual.remove_plugin_fdu_ls_eval(self.node, self.uuid, fdu_uuid, instance_uuid)
+            self.connector.loc.actual.remove_plugin_fdu_file_eval(self.node, self.uuid, fdu_uuid, instance_uuid)
+
+
             self.logger.info('clean_fdu()', '[ DONE ] ROS2 Plugin - Clean ROS2 App uuid {}'.format(instance_uuid))
 
 
-    def run_fdu(self, instance_uuid):
-        self.logger.info('run_fdu()', ' ROS2 Plugin - Starting ROS2 App uuid {}'.format(instance_uuid))
-        fdu = self.current_fdus.get(instance_uuid, None)
-        if fdu is None:
-            self.logger.error('run_fdu()', 'ROS2 Plugin - FDU not exists')
-            raise FDUNotExistingException('FDU not existing',
-                                             'FDU {} not in runtime {}'.format(instance_uuid, self.uuid))
-        elif fdu.get_status() != State.CONFIGURED:
-            self.logger.error('run_fdu()', 'ROS2 Plugin - FDU state is wrong, or transition not allowed')
-            raise StateTransitionNotAllowedException('FDU is not in CONFIGURED state',
-                                                     'FDU {} is not in CONFIGURED state'.format(instance_uuid))
-        else:
-            self.logger.info('run_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
-            fdu_uuid = fdu.get_fdu_id()
+    def start_fdu(self, instance_uuid, env):
+        self.logger.info('start_fdu()', ' ROS2 Plugin - Starting ROS2 App uuid {} ENV='.format(instance_uuid, env))
+        try:
+            fdu = self.current_fdus.get(instance_uuid, None)
 
-            # Creating sh file and starting using Popen
-            app_template =  self.os.read_file(os.path.join(self.DIR, 'templates', 'app.sh'))
-            app_sh = Environment().from_string(app_template)
-            app_sh = app_sh.render(ros_distro=self.ros_distro,rmw=self.rmw,id=fdu_uuid)
-            path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'run_{}.sh'.format(instance_uuid))
-            child_pid_path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'child_{}.pid'.format(instance_uuid))
-            self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
-            chmod_cmd = 'chmod +x {}'.format(path)
-            self.os.execute_command(chmod_cmd, blocking=True, external=False)
-            cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
-            outfile = open(fdu.outfile,'w')
-            p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,executable='/bin/bash')
-            fdu.on_start(p.pid)
 
-            self.current_fdus.update({instance_uuid: fdu})
-            self.update_fdu_status(fdu_uuid, instance_uuid, 'RUN')
-            self.logger.info('run_fdu()', '[ DONE ] ROS2 Plugin - Running ROS2 App uuid {}'.format(instance_uuid))
-            return True
+            env = self.__parse_environment(env)
+
+            if fdu is None:
+                self.logger.error('start_fdu()', 'ROS2 Plugin - FDU not exists')
+                return {'error': 'FDU not exists'}
+            elif fdu.get_status() != State.CONFIGURED:
+                self.logger.error('start_fdu()', 'ROS2 Plugin - FDU state is wrong, or transition not allowed')
+                return {'error': 'FDU is not in CONFIGURED state'}
+            else:
+                self.logger.info('start_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
+                fdu_uuid = fdu.get_fdu_id()
+
+                # Creating sh file and starting using Popen
+                app_template =  self.os.read_file(os.path.join(self.DIR, 'templates', 'app.sh'))
+                app_sh = Environment().from_string(app_template)
+                app_sh = app_sh.render(ros_distro=self.ros_distro,rmw=self.rmw,id=fdu_uuid)
+                path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'run_{}.sh'.format(instance_uuid))
+                child_pid_path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'child_{}.pid'.format(instance_uuid))
+                self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
+                chmod_cmd = 'chmod +x {}'.format(path)
+                self.os.execute_command(chmod_cmd, blocking=True, external=False)
+                cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
+                outfile = open(fdu.outfile,'w')
+                p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,stdin=PIPE, executable='/bin/bash', env=dict(os.environ,**env))
+                fdu.on_start(p.pid)
+
+                self.current_fdus.update({instance_uuid: fdu})
+                self.update_fdu_status(fdu_uuid, instance_uuid, 'RUN')
+                self.logger.info('start_fdu()', '[ DONE ] ROS2 Plugin - Running ROS2 App uuid {}'.format(instance_uuid))
+
+                return {'result':instance_uuid}
+        except Exception as e:
+            self.logger.info('start_fdu()', '[ ERRO ] ROS2 Plugin - Error: {}'.format(e))
+            traceback.print_exc()
+            return {'error':'{}'.format(e)}
+
+    def run_fdu(self, instance_uuid, env):
+        self.logger.info('run_fdu()', ' ROS2 Plugin - Starting ROS2 App uuid {} ENV='.format(instance_uuid, env))
+        try:
+            fdu = self.current_fdus.get(instance_uuid, None)
+
+
+            env = self.__parse_environment(env)
+
+            if fdu is None:
+                self.logger.error('run_fdu()', 'ROS2 Plugin - FDU not exists')
+                return {'error': 'FDU not exists'}
+            elif fdu.get_status() != State.CONFIGURED:
+                self.logger.error('run_fdu()', 'ROS2 Plugin - FDU state is wrong, or transition not allowed')
+                return {'error': 'FDU is not in CONFIGURED state'}
+            else:
+                self.logger.info('run_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
+                fdu_uuid = fdu.get_fdu_id()
+
+                # Creating sh file and starting using Popen
+                app_template =  self.os.read_file(os.path.join(self.DIR, 'templates', 'blocking_app.sh'))
+                app_sh = Environment().from_string(app_template)
+                app_sh = app_sh.render(ros_distro=self.ros_distro,rmw=self.rmw,id=fdu_uuid)
+                path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'run_{}.sh'.format(instance_uuid))
+                child_pid_path = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid ,'child_{}.pid'.format(instance_uuid))
+                self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
+                chmod_cmd = 'chmod +x {}'.format(path)
+                self.os.execute_command(chmod_cmd, blocking=True, external=False)
+                cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
+                outfile = open(fdu.outfile,'w')
+                p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,stdin=PIPE, executable='/bin/bash', env=dict(os.environ,**env))
+                fdu.on_start(p.pid)
+
+                self.current_fdus.update({instance_uuid: fdu})
+                self.update_fdu_status(fdu_uuid, instance_uuid, 'RUN')
+                self.logger.info('run_fdu()', '[ DONE ] ROS2 Plugin - Running ROS2 App uuid {}'.format(instance_uuid))
+
+
+                exit_code = p.wait()
+                return_code = '{}'.format(exit_code)
+                self.logger.info('run_blocking_fdu()', '[ DONE ] ROS2 Plugin - Running ROS2 uuid {} - exit code {}'.format(instance_uuid, return_code))
+
+                fdu.on_stop()
+                self.current_fdus.update({instance_uuid: fdu})
+                self.update_fdu_status(fdu_uuid, instance_uuid, 'CONFIGURE')
+
+                return {'result': return_code}
+        except Exception as e:
+            self.logger.info('run_fdu()', '[ ERRO ] ROS2 Plugin - Error: {}'.format(e))
+            traceback.print_exc()
+            return {'error':'{}'.format(e)}
 
     def stop_fdu(self, instance_uuid):
         self.logger.info('stop_fdu()', ' ROS2 Plugin - Stop ROS2 App uuid {}'.format(instance_uuid))
@@ -446,6 +537,78 @@ class ROS2(RuntimePluginFDU):
         else:
             self.connector.loc.actual.remove_node_fdu(self.node, self.uuid, fdu_uuid, instance_uuid)
 
+    def get_log_fdu(self, instance_uuid, unit):
+        try:
+            self.logger.info('get_log_fdu()', ' ROS2 Plugin - Running ROS2 uuid {}'.format(instance_uuid))
+            fdu = self.current_fdus.get(instance_uuid, None)
+            if fdu is None:
+                self.logger.error('get_log_fdu()', 'ROS2 Plugin - FDU not exists')
+                return {'error': 'FDU not exists'}
+            elif fdu.get_status() != State.CONFIGURED and fdu.get_status() != State.RUNNING:
+                self.logger.error('get_log_fdu()', 'ROS2 Plugin - FDU state is wrong, or transition not allowed')
+                return {'error': 'FDU is not in correct state'}
+            else:
+                self.logger.info('get_log_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
+                fdu_uuid = fdu.get_fdu_id()
+                out = open(fdu.outfile)
+                data = out.read()
+                out.close()
+                return {'result': data}
+
+        except Exception as e:
+            self.logger.info('get_log_fdu()', '[ ERRO ] ROS2 Plugin - Error: {}'.format(e))
+            traceback.print_exc()
+            return {'error':'{}'.format(e)}
+
+    def get_ls_fdu(self, instance_uuid, unit):
+        try:
+            self.logger.info('get_ls_fdu()', ' ROS2 Plugin - Running ROS2 uuid {}'.format(instance_uuid))
+            fdu = self.current_fdus.get(instance_uuid, None)
+            if fdu is None:
+                self.logger.error('get_ls_fdu()', 'ROS2 Plugin - FDU not exists')
+                return {'error': 'FDU not exists'}
+            elif fdu.get_status() != State.CONFIGURED and fdu.get_status() != State.RUNNING:
+                self.logger.error('get_log_fdu()', 'ROS2 Plugin - FDU state is wrong, or transition not allowed')
+                return {'error': 'FDU is not in correct state'}
+            else:
+                self.logger.info('get_ls_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
+                fdu_uuid = fdu.get_fdu_id()
+                native_dir = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid, fdu.name)
+
+                res = json.dumps(os.listdir(native_dir))
+                return {'result': res}
+
+        except Exception as e:
+            self.logger.info('get_ls_fdu()', '[ ERRO ] ROS2 Plugin - Error: {}'.format(e))
+            traceback.print_exc()
+            return {'error':'{}'.format(e)}
+
+    def get_file_fdu(self, instance_uuid, filename):
+        try:
+            self.logger.info('get_ls_fdu()', ' ROS2 Plugin - Running ROS2 uuid {}'.format(instance_uuid))
+            fdu = self.current_fdus.get(instance_uuid, None)
+            if fdu is None:
+                self.logger.error('get_ls_fdu()', 'ROS2 Plugin - FDU not exists')
+                return {'error': 'FDU not exists'}
+            elif fdu.get_status() != State.CONFIGURED and fdu.get_status() != State.RUNNING:
+                self.logger.error('get_log_fdu()', 'ROS2 Plugin - FDU state is wrong, or transition not allowed')
+                return {'error': 'FDU is not in correct state'}
+            else:
+                self.logger.info('get_ls_fdu()', 'ROS2 Plugin - FDU is {}'.format(fdu))
+                fdu_uuid = fdu.get_fdu_id()
+                native_dir = os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid, fdu.name)
+                if os.path.exists(os.path.join(native_dir, filename)) and os.path.isfile(os.path.join(native_dir, filename)):
+                    out = open(os.path.join(native_dir, filename))
+                    data = out.read()
+                    out.close()
+                    return {'result': data}
+                else:
+                    return {'error':'file not exists or is directory'}
+
+        except Exception as e:
+            self.logger.info('get_ls_fdu()', '[ ERRO ] ROS2 Plugin - Error: {}'.format(e))
+            traceback.print_exc()
+            return {'error':'{}'.format(e)}
 
     def __fdu_observer(self, fdu_info):
         self.logger.info('__fdu_observer()', ' ROS2 Plugin - New Action of a FDU - FDU Info: {}'.format(fdu_info))
@@ -493,7 +656,6 @@ class ROS2(RuntimePluginFDU):
             'CONFIGURE': self.configure_fdu,
             'STOP': self.stop_fdu,
             'RESUME': self.resume_fdu,
-            'RUN': self.run_fdu,
             'CLEAN': self.clean_fdu,
             'LAND': self.migrate_fdu,
             'TAKE_OFF': self.migrate_fdu
@@ -530,6 +692,19 @@ class ROS2(RuntimePluginFDU):
             random.randint(0x00, 0xff),
             random.randint(0x00, 0xff) ]
         return ':'.join(map(lambda x: "%02x" % x, d))
+
+
+    def __parse_environment(self, env):
+        d_env = {}
+        if env == "":
+            return d_env
+        env = env.split(',')
+        for e in env:
+            ev = e.split('=')
+            k = ev[0]
+            v = ev[1]
+            d_env.update({k:v})
+        return d_env
 
 
 def read_file(file_path):
