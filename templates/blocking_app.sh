@@ -32,7 +32,7 @@ trap cleanup 1 2 3 6
 cleanup(){
 	echo "=== Kill ROS2 Application ==="
 	# screen -S {{ id }} -X quit
-	# echo "=== Bye ==="
+	echo "=== Bye ==="
 	exit 0
 }
 
@@ -60,10 +60,9 @@ echo "--- RMW Implementation = $RMW_IMPLEMENTATION ---"
 echo "=== Run ROS2 Application ==="
 #source $CYCLONE
 source install/setup.bash
-
 ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@
-
 # CMD="ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@"
+# $CMD
 # screen -S {{ id }} -dm $CMD
 # while [ True ];
 # do
