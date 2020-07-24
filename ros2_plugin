@@ -296,12 +296,10 @@ class ROS2(RuntimePluginFDU):
 
                     fdu.virtual_interfaces.append({'internal':intf_info.get('internal'), 'external':intf_info.get('external')})
 
-            fdu.on_configured()
 
             self.logger.info('configure_fdu()', ' ROS2 Plugin - FDU is {}'.format(fdu))
 
-            self.current_fdus.update({instance_uuid: fdu})
-            self.update_fdu_status(fdu_uuid, instance_uuid, 'CONFIGURE')
+
 
 
             self.logger.info('configure_fdu()', '[ INFO ] ROS2 Plugin - Registreting blocking start/run/log/ls/file evals for {}'.format(instance_uuid))
@@ -321,7 +319,9 @@ class ROS2(RuntimePluginFDU):
                 self.logger.error('configure_fdu()', '[ ERRO ] ROS2 Plugin - Error in registering start/run/log/ls/file function: {}'.format(e))
                 traceback.print_exc()
 
-
+            fdu.on_configured()
+            self.current_fdus.update({instance_uuid: fdu})
+            self.update_fdu_status(fdu_uuid, instance_uuid, 'CONFIGURE')
             self.logger.info('configure_fdu()', '[ DONE ] ROS2 Plugin - Configure ROS2 App FDU uuid {}'.format(instance_uuid))
 
     def clean_fdu(self, instance_uuid):
