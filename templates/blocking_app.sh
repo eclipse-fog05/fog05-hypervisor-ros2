@@ -31,7 +31,6 @@ trap cleanup 1 2 3 6
 
 cleanup(){
 	echo "=== Kill ROS2 Application ==="
-	# screen -S {{ id }} -X quit
 	echo "=== Bye ==="
 	exit 0
 }
@@ -48,25 +47,9 @@ echo "--- Entry Point = $ROS_ENTRY_POINT ---"
 echo "--- ROS2 Distribution = $ROSDISTRO ---"
 echo "--- RMW Implementation = $RMW_IMPLEMENTATION ---"
 
-# echo "=== Kill old screens ==="
-# screen -S {{ id }} -X quit
-
-
-# echo "=== Build ROS2 Application  ==="
-# sudo rosdep install -i --from-path . --rosdistro $ROSDISTRO -y
-# colcon build --packages-select $ROS_APP_NAME
-
 
 echo "=== Run ROS2 Application ==="
-#source $CYCLONE
+
 source install/setup.bash
 ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@
-# CMD="ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@"
-# $CMD
-# screen -S {{ id }} -dm $CMD
-# while [ True ];
-# do
-# 	NOW=$(date '+%F_%H:%M:%S')
-# 	echo "=== Still running at $NOW ==="
-# 	sleep 1
-# done
+ros2 launch $ROS_APP_NAME $ROS_ENTRY_POINT $@
