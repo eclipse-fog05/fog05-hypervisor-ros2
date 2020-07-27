@@ -449,7 +449,7 @@ class ROS2(RuntimePluginFDU):
                 self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
                 chmod_cmd = 'chmod +x {}'.format(path)
                 self.os.execute_command(chmod_cmd, blocking=True, external=False)
-                cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
+                cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c \"{} {} {} {} {}\"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
                 outfile = open(fdu.outfile,'w')
                 p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,stdin=PIPE, executable='/bin/bash', env=dict(os.environ,**env))
                 fdu.on_start(p.pid)
