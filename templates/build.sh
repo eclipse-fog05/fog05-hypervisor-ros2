@@ -34,7 +34,7 @@ echo "--- ROS2 Distribution = $ROSDISTRO ---"
 echo "--- RMW Implementation = $RMW_IMPLEMENTATION ---"
 
 
-echo "=== Build ROS2 Application  ==="
-sudo rosdep install -i --from-path . --rosdistro $ROSDISTRO -y
-colcon build --packages-select $ROS_APP_NAME
+echo "=== Doing nothing in configure step  ==="
+#sudo rosdep install -i --from-path . --rosdistro $ROSDISTRO -y
+#colcon build --packages-select $ROS_APP_NAME
 echo "=== Done ==="
