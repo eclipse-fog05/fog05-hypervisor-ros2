@@ -146,7 +146,8 @@ class ROS2(RuntimePluginFDU):
 
             if zip_file.endswith('tar.gz'):
                 unzip_cmd = 'tar -zxvf {} -C {}'.format(zip_file, dest)
-                fdu.set_app_path(os.path.join(dest,desc.get('name')))
+                fdu.set_app_path(dest)
+                #fdu.set_app_path(os.path.join(dest,desc.get('name')))
                 self.os.execute_command(unzip_cmd, blocking=True, external=True)
             else:
                 raise ValueError("ROS2 Application can be only packaged as .tar.gz")
@@ -206,6 +207,7 @@ class ROS2(RuntimePluginFDU):
             self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'build_{}.sh'.format(instance_uuid) )
             chmod_cmd = 'chmod +x {}'.format(path)
             self.os.execute_command(chmod_cmd, blocking=True, external=False)
+            self.logger.info('configure_fdu()','Command {} {} {}'.format(path, fdu.app_path, fdu.name))
             self.os.execute_command('{} {} {}'.format(path, fdu.app_path, fdu.name), blocking=True, external=True)
             #
             self.logger.info('configure_fdu()', 'After build ')
@@ -235,7 +237,7 @@ class ROS2(RuntimePluginFDU):
                     if real_intf_name is None:
                         raise ValueError("phy_face cannot be none")
                     if self.os.get_intf_type(real_intf_name) in ['ethernet']:
-                        self.logger.info('configure_fdu()', 'ROS2 FDU Plugin - Creating macvlan interface')
+                        self.logger.error('configure_fdu()', 'ROS2 FDU Plugin - Creating macvlan interface')
                         mac = intf.get('mac_address', self.__generate_random_mac())
                         intf.update({'mac_address': mac})
 
@@ -248,7 +250,7 @@ class ROS2(RuntimePluginFDU):
                         fdu.virtual_interfaces.append({'internal':intf_info.get('internal'), 'external':None})
 
                     elif self.os.get_intf_type(real_intf_name) in ['wireless']:
-                        self.logger.info('configure_fdu()', 'ROS2 FDU Plugin - Creating moving wireless interface to namespace')
+                        self.logger.error('configure_fdu()', 'ROS2 FDU Plugin - Creating moving wireless interface to namespace')
                         intf_info = self.nm.move_interface_in_namespace(real_intf_name, fdu.namespace)
                         self.nm.rename_virtual_interface_in_namespace(real_intf_name, intf_name, fdu.namespace)
                         intf_info.update({"name":intf_name})
@@ -273,7 +275,7 @@ class ROS2(RuntimePluginFDU):
                         # adding to the list of interfaces
                         fdu.virtual_interfaces.append({'internal':intf_info.get('internal'), 'external':intf_info.get('external')})
                 else:
-                    self.logger.info('configure_fdu()', 'ROS2 FDU Plugin creating interface attached to connection point')
+                    self.logger.error('configure_fdu()', 'ROS2 FDU Plugin creating interface attached to connection point')
                     mac = intf.get('mac_address', self.__generate_random_mac())
                     intf.update({'mac_address': mac})
                     intf_info = self.nm.create_virtual_interface_in_namespace(intf_name, fdu.namespace)
@@ -298,7 +300,6 @@ class ROS2(RuntimePluginFDU):
 
 
             self.logger.info('configure_fdu()', ' ROS2 Plugin - FDU is {}'.format(fdu))
-
 
 
 
@@ -449,7 +450,7 @@ class ROS2(RuntimePluginFDU):
                 self.os.store_file(app_sh, os.path.join(self.BASE_DIR, self.STORE_DIR, fdu_uuid),'run_{}.sh'.format(instance_uuid) )
                 chmod_cmd = 'chmod +x {}'.format(path)
                 self.os.execute_command(chmod_cmd, blocking=True, external=False)
-                cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c \"{} {} {} {} {}\"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
+                cmd = 'sudo fos_ros_isolate /var/run/netns/{} {} bash -c "{} {} {} {} {}"'.format(fdu.namespace, child_pid_path, path, fdu.app_path,  fdu.name, fdu.cmd, ' '.join(fdu.args))
                 outfile = open(fdu.outfile,'w')
                 p = psutil.Popen(cmd, shell=True, stdout=outfile, stderr=outfile,stdin=PIPE, executable='/bin/bash', env=dict(os.environ,**env))
                 fdu.on_start(p.pid)
