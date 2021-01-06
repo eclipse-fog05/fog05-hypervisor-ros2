@@ -47,6 +47,7 @@ pub struct ROS2HVSpecificInfo {
     pub pid: u32,
     pub env: HashMap<String, String>,
     pub instance_path: String,
+    pub image_folder: Option<String>,
     pub instance_files: Vec<String>,
     pub netns: Option<Uuid>,
 }

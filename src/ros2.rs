@@ -156,22 +156,74 @@ impl HypervisorPlugin for ROS2Hypervisor {
                     .ok_or(FError::EncodingError)?
                     .to_string();
 
-                let hv_specific = ROS2HVSpecificInfo {
+                let mut hv_specific = ROS2HVSpecificInfo {
                     pid: 0,
                     env: hv_info.env.clone(),
-                    // the base path need to be configurable from a configuration file
                     instance_path,
+                    image_folder: None,
                     instance_files: Vec::new(),
                     netns: fdu_ns,
                 };
 
                 //creating instance path
-                let descriptor = self
-                    .os
+                self.os
                     .as_ref()
                     .unwrap()
                     .create_dir(hv_specific.clone().instance_path)
                     .await??;
+
+                // Getting the image
+                // ROS2 Plugin expects images to be packaged as .tar.gz
+                // once the download is complete the image will be
+                // decompressed
+                match descriptor.image {
+                    Some(img) => {
+                        let uri = url::Url::parse(&img.uri.clone())
+                            .map_err(|e| FError::HypervisorError(format!("{}", e)))?;
+                        let img_uri = img.uri.clone();
+                        let splitter_uri = img_uri.split("/").collect::<Vec<&str>>();
+                        let f_name = splitter_uri.last().ok_or(FError::NotFound)?;
+                        let f_path = self
+                            .get_run_path()
+                            .join(format!("{}", instance_uuid))
+                            .join(format!("{}", f_name))
+                            .to_str()
+                            .ok_or(FError::EncodingError)?
+                            .to_string();
+                        log::trace!("Image {} will be downloaded in {}", uri, f_path);
+                        self.os
+                            .as_ref()
+                            .unwrap()
+                            .download_file(uri, f_path.clone())
+                            .await??;
+
+                        let img_name = match f_name.strip_suffix(".tar.gz") {
+                            Some(x) => x,
+                            None => {
+                                return Err(FError::HypervisorError(
+                                    "Image is not packaged as .tar.gz".to_string(),
+                                ));
+                            }
+                        };
+
+                        let img_folder_path = self
+                            .get_run_path()
+                            .join(format!("{}", instance_uuid))
+                            .join(format!("{}", img_name))
+                            .to_str()
+                            .ok_or(FError::EncodingError)?
+                            .to_string();
+
+                        log::trace!("Expected image folder {}", img_folder_path);
+
+                        let cmd = format!("tar -xzf {} {}", f_path, img_folder_path);
+
+                        self.os.as_ref().unwrap().execute_command(cmd).await??;
+
+                        hv_specific.image_folder = Some(String::from(img_folder_path));
+                    }
+                    None => (),
+                };
 
                 // Adding hv specific info
                 instance.hypervisor_specific = Some(serialize_ros2_specific_info(&hv_specific)?);
@@ -451,7 +503,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                     cmd.arg("--rmw");
                     cmd.arg(self.config.rmw.clone());
                     cmd.arg("--app-path");
-                    cmd.arg(hv_specific.instance_path.clone());
+                    cmd.arg(hv_specific.image_folder.clone().ok_or(FError::NotFound)?);
                     cmd.arg("--app-name");
                     cmd.arg(hv_info.app_name);
                     cmd.arg("--cmd");
