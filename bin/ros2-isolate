@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+
+# Copyright (c) 2014,2021 ADLINK Technology Inc.
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors: Gabriele Baldoni, ADLINK Technology Inc. - ROS2 Plugin
+
+
+# POSIX -- Reset in case getopts has been used previously in the shell.
+OPTIND=1
+
+# Initializing variables
+ROS_APP_PATH=""
+ROS_APP_NAME=""
+ROS_ENTRY_POINT=""
+ROS_DISTRO=""
+RMW_IMPLEMENTATION=""
+LAUNCH=0
+
+# Getting arguments
+while getopts ":d:r:p:n:c:l" opt; do
+    case "$opt" in
+    d )
+        ROS_DISTRO=$OPTARG
+        ;;
+    r)
+        RMW_IMPLEMENTATION=$OPTARG
+        ;;
+    p)
+        ROS_APP_PATH=$OPTARG
+        ;;
+    n)
+        ROS_APP_NAME=$OPTARG
+        ;;
+    c)
+        ROS_ENTRY_POINT=$OPTARG
+        ;;
+    l)
+        LAUNCH=1
+        ;;
+    esac
+done
+
+
+shift $((OPTIND-1))
+
+ROS2=$(printf "/opt/ros/%s/setup.bash" $ROS_DISTRO)
+
+
+#trap cleanup 1 2 3 6
+
+# cleanup(){
+# 	echo "=== Kill ROS2 Application ==="
+# 	# screen -S {{ id }} -X quit
+# 	# echo "=== Bye ==="
+# 	exit 0
+# }
+
+
+export $RWM_IMPLEMENTATION
+cd $ROS_APP_PATH
+source $ROS2
+
+echo "--- ROS2 Distribution = $ROS_DISTRO ---"
+echo "--- ROS2 Path = $ROS2 ---"
+echo "--- RMW Implementation = $RMW_IMPLEMENTATION ---"
+echo "--- Launch = $LAUNCH ---"
+echo "--- App Path = $ROS_APP_PATH ---"
+echo "--- App Name = $ROS_APP_NAME ---"
+echo "--- Entry Point = $ROS_ENTRY_POINT ---"
+echo "--- Args = $@ ---"
+
+
+
+
+source install/setup.bash
+
+if [[ $LAUNCH -eq 1 ]]
+then
+    echo "=== Launch ROS2 Application ==="
+    ros2 launch $ROS_APP_NAME $ROS_ENTRY_POINT $@
+else
+    echo "=== Run ROS2 Application ==="
+    ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@
+fi
+

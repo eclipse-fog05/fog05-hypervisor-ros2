@@ -1,0 +1,14 @@
+[unit]
+Description = Eclipse fog05 ROS2 Plugin
+
+
+
+[Service]
+Type=simple
+PIDFile=/var/fos/hv-ros2.pid
+ExecStart = /usr/bin/fos-hv-ros2 -c /etc/fos/ros2-hypervisor/config.yaml
+KillMode=process
+Restart=on-failure
+User=root
+[Install]
+WantedBy=multi-user.target

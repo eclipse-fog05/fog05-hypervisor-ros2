@@ -1,0 +1,92 @@
+[package]
+name = "fog05-hypervisor-ros2"
+version = "0.3.0-alpha1"
+repository = "https://github.com/eclipse-fog05/fog05-hypervisor-ros2"
+homepage = "http://fog05.io"
+authors = ["gabrik <gabriele.baldoni@gmail.com>"]
+edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+description = "fog05: The End-to-End Compute, Storage and Networking Virtualisation solution."
+readme = "README.md"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-std = { version = "=1.8.0", features = ["attributes"] }
+zenoh = { git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "master" }
+zenoh-protocol = { git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "master" }
+uhlc = "0.2"
+async-trait = "0.1.36"
+futures = "0.3.5"
+thiserror = "1.0"
+serde_derive = "1.0.55"
+serde = { version = "1.0.55", features = ["derive"] }
+serde_json = "1.0.55"
+serde_yaml = "0.8.13"
+semver = { version = "0.11.0", features = ["serde"]}
+uuid = { version = "0.8.1", features = ["serde", "v4"] }
+base64 = "0.12.3"
+url = "2.1.1"
+zrpc = { git = "https://github.com/eclipse-fog05/fog05.git", branch = "master" }
+znrpc-macros = { git = "https://github.com/eclipse-fog05/fog05.git", branch = "master" }
+fog05-sdk = { git = "https://github.com/eclipse-fog05/fog05.git", branch = "master" }
+async-ctrlc ={version = "1.2.0", features = ["stream"]}
+clap = "2.33"
+structopt = "0.3.13"
+log = "0.4"
+env_logger = "0.7.1"
+git-version = "0.3.4"
+nix = {version = "0.19.0"}
+signal-hook = "0.2.1"
+signal-hook-async-std = "0.1.0"
+caps = {version = "0.5.0", optional = true}
+
+[features]
+isolation = ["caps"]
+default = ["isolation"]
+
+[[bin]]
+name = "ros2-hypervisor"
+path = "bin/ros2-hypervisor.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "prepare-ros2-isolate"
+path = "bin/prepare-ros2-isolate.rs"
+test = false
+bench = false
+
+[profile.release]
+debug=false
+lto = true
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+
+[package.metadata.deb]
+maintainer = "ADLINK fog05 team <fog05@adlink-labs.tech>"
+copyright = "2021, ADLINK Technology Inc"
+extended-description = "Eclipse fog05 Linux Binaries Plugin"
+license-file = ["LICENSE.md", "0"]
+maintainer-scripts = "resources/debian/"
+depends = "fog05-agent (>= 0.3 ), fog05-agent (<< 0.4 ), $auto"
+section = "utils"
+priority = "optional"
+assets = [
+    # binary
+    ["target/release/ros2-hypervisor", "/usr/bin/fos-hv-ros2", "755"],
+    ["bin/ros2-isolate", "/usr/bin/fos-ros2-isolate", "755"],
+    ["target/release/prepare-ros2-isolate", "/usr/bin/fos-prepare-ros2-isolate", "755"],
+    # assets
+    ["etc/*", "/etc/fos/ros2-hypervisor", "644"],
+    ["etc/*", "/var/fos/ros2-hypervisor", "644"],
+    ["resources/fos-hv-ros2.service", "/lib/systemd/system/fos-hv-ros2.service", "644"],
+]
+conf-files = ["/etc/fos/ros2-hypervisor/config.yaml"]
+
+[package.metadata.deb.systemd-units]
+unit-scripts = "resources/"
+unit-name = "fos-hv-ros2.service"
+

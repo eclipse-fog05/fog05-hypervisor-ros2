@@ -1,0 +1,8 @@
+---
+    pid_file : /tmp/fos-ros2.pid
+    zlocator : tcp/127.0.0.1:7447
+    path : /etc/fos/ros2-hypervisor
+    run_path : /var/fos/ros2-hypervisor
+    ros2_distro: foxy
+    rmw: rmw_cyclonedds_cpp
+    monitoring_interveal: 10
