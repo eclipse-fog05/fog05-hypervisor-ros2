@@ -96,6 +96,7 @@ cleanup(){
 	echo "=== Kill ROS2 Application ${ROS_PID} ==="
 
     kill -2 $(ps -o pid= --ppid $ROS_PID)
+    kill -2 $ROS_PID
 
 	# screen -S {{ id }} -X quit
 	echo "=== Bye ==="
