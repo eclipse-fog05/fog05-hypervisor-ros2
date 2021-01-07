@@ -4,10 +4,13 @@ Description = Eclipse fog05 ROS2 Plugin
 
 
 [Service]
+Environment=RUST_LOG="fog05_hypervisor_ros2=trace"
 Type=simple
 PIDFile=/var/fos/hv-ros2.pid
 ExecStart = /usr/bin/fos-hv-ros2 -c /etc/fos/ros2-hypervisor/config.yaml
-KillMode=process
+KillMode=mixed
+KillSignal=SIGINT
+RestartKillSignal=SIGINT
 Restart=on-failure
 User=root
 [Install]

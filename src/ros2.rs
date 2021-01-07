@@ -216,7 +216,9 @@ impl HypervisorPlugin for ROS2Hypervisor {
 
                         log::trace!("Expected image folder {}", img_folder_path);
 
-                        let cmd = format!("tar -xzf {} {}", f_path, img_folder_path);
+                        let cmd = format!("tar -xzf {} -C {}", f_path, hv_specific.clone().instance_path);
+
+                        log::trace!("Decompressing command {}", cmd);
 
                         self.os.as_ref().unwrap().execute_command(cmd).await??;
 
@@ -399,6 +401,13 @@ impl HypervisorPlugin for ROS2Hypervisor {
                     &instance.clone().hypervisor_specific.unwrap().as_slice(),
                 )?;
 
+                let descriptor = self
+                    .agent
+                    .as_ref()
+                    .unwrap()
+                    .fdu_info(instance.fdu_uuid)
+                    .await??;
+
                 for iface in instance.interfaces {
                     self.net
                         .as_ref()
@@ -431,8 +440,50 @@ impl HypervisorPlugin for ROS2Hypervisor {
                     }
                 }
 
+                match descriptor.image {
+                    Some(img) => {
+                        let img_uri = img.uri.clone();
+                        let splitter_uri = img_uri.split("/").collect::<Vec<&str>>();
+                        let f_name = splitter_uri.last().ok_or(FError::NotFound)?;
+                        let f_path = self
+                            .get_run_path()
+                            .join(format!("{}", instance_uuid))
+                            .join(format!("{}", f_name))
+                            .to_str()
+                            .ok_or(FError::EncodingError)?
+                            .to_string();
+                        match std::fs::remove_file(f_path.clone()) {
+                            Ok(_) => log::trace!("Removed {}", f_path),
+                            Err(e) => log::warn!("file {} {}", f_path, e),
+                        }
+
+                        let img_name = match f_name.strip_suffix(".tar.gz") {
+                            Some(x) => x,
+                            None => {
+                                return Err(FError::HypervisorError(
+                                    "Image is not packaged as .tar.gz".to_string(),
+                                ));
+                            }
+                        };
+
+                        let img_folder_path = self
+                            .get_run_path()
+                            .join(format!("{}", instance_uuid))
+                            .join(format!("{}", img_name))
+                            .to_str()
+                            .ok_or(FError::EncodingError)?
+                            .to_string();
+                        match std::fs::remove_dir_all(img_folder_path.clone()) {
+                                Ok(_) => log::trace!("Removed {}", img_folder_path),
+                                Err(e) => log::warn!("file {} {}", img_folder_path, e),
+                        }
+                    }
+                    None => ()
+                };
+
+
                 //removing instance directory
-                let descriptor = self
+                self
                     .os
                     .as_ref()
                     .unwrap()
@@ -674,7 +725,7 @@ impl ROS2Hypervisor {
             .unwrap()
             .register_plugin(
                 self.fdus.read().await.uuid.unwrap(),
-                PluginKind::HYPERVISOR(String::from("bare")),
+                PluginKind::HYPERVISOR(String::from("ros2")),
             )
             .await??;
 

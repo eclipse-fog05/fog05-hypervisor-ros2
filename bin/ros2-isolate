@@ -57,14 +57,6 @@ shift $((OPTIND-1))
 ROS2=$(printf "/opt/ros/%s/setup.bash" $ROS_DISTRO)
 
 
-#trap cleanup 1 2 3 6
-
-# cleanup(){
-# 	echo "=== Kill ROS2 Application ==="
-# 	# screen -S {{ id }} -X quit
-# 	# echo "=== Bye ==="
-# 	exit 0
-# }
 
 
 export $RWM_IMPLEMENTATION
@@ -88,9 +80,27 @@ source install/setup.bash
 if [[ $LAUNCH -eq 1 ]]
 then
     echo "=== Launch ROS2 Application ==="
-    ros2 launch $ROS_APP_NAME $ROS_ENTRY_POINT $@
+    ros2 launch $ROS_APP_NAME $ROS_ENTRY_POINT $@ &
+    ROS_PID=$!
 else
     echo "=== Run ROS2 Application ==="
-    ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@
+    ros2 run $ROS_APP_NAME $ROS_ENTRY_POINT $@ &
+    ROS_PID=$!
 fi
 
+echo "=== ROS2 PID: ${ROS_PID} ==="
+
+trap cleanup 1 2 3 6
+
+cleanup(){
+	echo "=== Kill ROS2 Application ${ROS_PID} ==="
+
+    kill -2 $(ps -o pid= --ppid $ROS_PID)
+
+	# screen -S {{ id }} -X quit
+	echo "=== Bye ==="
+	exit 0
+}
+
+
+wait $ROS_PID
