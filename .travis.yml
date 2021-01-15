@@ -6,6 +6,8 @@ rust:
 matrix:
   allow_failures:
     - rust: nightly
+before_install:
+  - cargo install cargo-deb
 script:
   - cargo check
   - cargo fmt -- --check
