@@ -26,6 +26,8 @@ use async_std::task;
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 
+use psutil::process::{processes, Process, ProcessError, Status as ProcessStatus};
+
 use znrpc_macros::znserver;
 use zrpc::ZNServe;
 
@@ -68,6 +70,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
             status: FDUState::DEFINED,
             error: None,
             hypervisor_specific: None,
+            restarts: 0,
         };
         log::trace!("Add instance to local state");
         guard.fdus.insert(instance_uuid, instance.clone());
@@ -89,7 +92,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
             .get_node_instance(node_uuid, instance_uuid)
             .await?;
         match instance.status {
-            FDUState::DEFINED => {
+            FDUState::DEFINED | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await;
                 guard.fdus.remove(&instance_uuid);
                 self.connector
@@ -115,7 +118,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
             .await?;
         log::trace!("Check FDU status: {:?}", instance.status);
         match instance.status {
-            FDUState::DEFINED => {
+            FDUState::DEFINED | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await; //taking lock
 
                 // Here we should create the network interfaces
@@ -176,56 +179,57 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 // ROS2 Plugin expects images to be packaged as .tar.gz
                 // once the download is complete the image will be
                 // decompressed
-                match descriptor.image {
-                    Some(img) => {
-                        let uri = url::Url::parse(&img.uri.clone())
-                            .map_err(|e| FError::HypervisorError(format!("{}", e)))?;
-                        let img_uri = img.uri.clone();
-                        let splitter_uri = img_uri.split("/").collect::<Vec<&str>>();
-                        let f_name = splitter_uri.last().ok_or(FError::NotFound)?;
-                        let f_path = self
-                            .get_run_path()
-                            .join(format!("{}", instance_uuid))
-                            .join(format!("{}", f_name))
-                            .to_str()
-                            .ok_or(FError::EncodingError)?
-                            .to_string();
-                        log::trace!("Image {} will be downloaded in {}", uri, f_path);
-                        self.os
-                            .as_ref()
-                            .unwrap()
-                            .download_file(uri, f_path.clone())
-                            .await??;
+                if let Some(img) = descriptor.image {
+                    let uri = url::Url::parse(&img.uri.clone())
+                        .map_err(|e| FError::HypervisorError(format!("{}", e)))?;
+                    let img_uri = img.uri.clone();
+                    let splitter_uri = img_uri.split('/').collect::<Vec<&str>>();
+                    let f_name = splitter_uri.last().ok_or(FError::NotFound)?;
+                    let f_path = self
+                        .get_run_path()
+                        .join(format!("{}", instance_uuid))
+                        .join(f_name.to_string())
+                        .to_str()
+                        .ok_or(FError::EncodingError)?
+                        .to_string();
+                    log::trace!("Image {} will be downloaded in {}", uri, f_path);
+                    self.os
+                        .as_ref()
+                        .unwrap()
+                        .download_file(uri, f_path.clone())
+                        .await??;
 
-                        let img_name = match f_name.strip_suffix(".tar.gz") {
-                            Some(x) => x,
-                            None => {
-                                return Err(FError::HypervisorError(
-                                    "Image is not packaged as .tar.gz".to_string(),
-                                ));
-                            }
-                        };
+                    let img_name = match f_name.strip_suffix(".tar.gz") {
+                        Some(x) => x,
+                        None => {
+                            return Err(FError::HypervisorError(
+                                "Image is not packaged as .tar.gz".to_string(),
+                            ));
+                        }
+                    };
 
-                        let img_folder_path = self
-                            .get_run_path()
-                            .join(format!("{}", instance_uuid))
-                            .join(format!("{}", img_name))
-                            .to_str()
-                            .ok_or(FError::EncodingError)?
-                            .to_string();
+                    let img_folder_path = self
+                        .get_run_path()
+                        .join(format!("{}", instance_uuid))
+                        .join(img_name.to_string())
+                        .to_str()
+                        .ok_or(FError::EncodingError)?
+                        .to_string();
 
-                        log::trace!("Expected image folder {}", img_folder_path);
+                    log::trace!("Expected image folder {}", img_folder_path);
 
-                        let cmd = format!("tar -xzf {} -C {}", f_path, hv_specific.clone().instance_path);
+                    let cmd = format!(
+                        "tar -xzf {} -C {}",
+                        f_path,
+                        hv_specific.clone().instance_path
+                    );
 
-                        log::trace!("Decompressing command {}", cmd);
+                    log::trace!("Decompressing command {}", cmd);
 
-                        self.os.as_ref().unwrap().execute_command(cmd).await??;
+                    self.os.as_ref().unwrap().execute_command(cmd).await??;
 
-                        hv_specific.image_folder = Some(String::from(img_folder_path));
-                    }
-                    None => (),
-                };
+                    hv_specific.image_folder = Some(img_folder_path);
+                }
 
                 // Adding hv specific info
                 instance.hypervisor_specific = Some(serialize_ros2_specific_info(&hv_specific)?);
@@ -394,7 +398,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
             .get_node_instance(node_uuid, instance_uuid)
             .await?;
         match instance.status {
-            FDUState::CONFIGURED => {
+            FDUState::CONFIGURED | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await;
 
                 let mut hv_specific = deserialize_ros2_specific_info(
@@ -440,51 +444,46 @@ impl HypervisorPlugin for ROS2Hypervisor {
                     }
                 }
 
-                match descriptor.image {
-                    Some(img) => {
-                        let img_uri = img.uri.clone();
-                        let splitter_uri = img_uri.split("/").collect::<Vec<&str>>();
-                        let f_name = splitter_uri.last().ok_or(FError::NotFound)?;
-                        let f_path = self
-                            .get_run_path()
-                            .join(format!("{}", instance_uuid))
-                            .join(format!("{}", f_name))
-                            .to_str()
-                            .ok_or(FError::EncodingError)?
-                            .to_string();
-                        match std::fs::remove_file(f_path.clone()) {
-                            Ok(_) => log::trace!("Removed {}", f_path),
-                            Err(e) => log::warn!("file {} {}", f_path, e),
-                        }
-
-                        let img_name = match f_name.strip_suffix(".tar.gz") {
-                            Some(x) => x,
-                            None => {
-                                return Err(FError::HypervisorError(
-                                    "Image is not packaged as .tar.gz".to_string(),
-                                ));
-                            }
-                        };
-
-                        let img_folder_path = self
-                            .get_run_path()
-                            .join(format!("{}", instance_uuid))
-                            .join(format!("{}", img_name))
-                            .to_str()
-                            .ok_or(FError::EncodingError)?
-                            .to_string();
-                        match std::fs::remove_dir_all(img_folder_path.clone()) {
-                                Ok(_) => log::trace!("Removed {}", img_folder_path),
-                                Err(e) => log::warn!("file {} {}", img_folder_path, e),
-                        }
+                if let Some(img) = descriptor.image {
+                    let img_uri = img.uri;
+                    let splitter_uri = img_uri.split('/').collect::<Vec<&str>>();
+                    let f_name = splitter_uri.last().ok_or(FError::NotFound)?;
+                    let f_path = self
+                        .get_run_path()
+                        .join(format!("{}", instance_uuid))
+                        .join(f_name.to_string())
+                        .to_str()
+                        .ok_or(FError::EncodingError)?
+                        .to_string();
+                    match std::fs::remove_file(f_path.clone()) {
+                        Ok(_) => log::trace!("Removed {}", f_path),
+                        Err(e) => log::warn!("file {} {}", f_path, e),
                     }
-                    None => ()
+
+                    let img_name = match f_name.strip_suffix(".tar.gz") {
+                        Some(x) => x,
+                        None => {
+                            return Err(FError::HypervisorError(
+                                "Image is not packaged as .tar.gz".to_string(),
+                            ));
+                        }
+                    };
+
+                    let img_folder_path = self
+                        .get_run_path()
+                        .join(format!("{}", instance_uuid))
+                        .join(img_name.to_string())
+                        .to_str()
+                        .ok_or(FError::EncodingError)?
+                        .to_string();
+                    match std::fs::remove_dir_all(img_folder_path.clone()) {
+                        Ok(_) => log::trace!("Removed {}", img_folder_path),
+                        Err(e) => log::warn!("file {} {}", img_folder_path, e),
+                    }
                 };
 
-
                 //removing instance directory
-                self
-                    .os
+                self.os
                     .as_ref()
                     .unwrap()
                     .rm_dir(hv_specific.clone().instance_path)
@@ -520,7 +519,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
             .await?;
         log::trace!("Instance status {:?}", instance.status);
         match instance.status {
-            FDUState::CONFIGURED => {
+            FDUState::CONFIGURED | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await;
 
                 let descriptor = self
@@ -606,6 +605,10 @@ impl HypervisorPlugin for ROS2Hypervisor {
 
                 instance.hypervisor_specific = Some(serialize_ros2_specific_info(&hv_specific)?);
 
+                if let FDUState::ERROR(_) = instance.status {
+                    instance.restarts += 1
+                }
+
                 instance.status = FDUState::RUNNING;
                 self.connector
                     .global
@@ -647,7 +650,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
             .await?;
         log::trace!("Instance status {:?}", instance.status);
         match instance.status {
-            FDUState::RUNNING => {
+            FDUState::RUNNING | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await;
                 instance.status = FDUState::CONFIGURED;
 
@@ -733,10 +736,119 @@ impl ROS2Hypervisor {
 
         let (shv, hhv) = hv_server.start().await?;
 
+        let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
+        let mut mon_self = self.clone();
         let monitoring = async {
             loop {
                 log::info!("Monitoring loop started");
-                task::sleep(Duration::from_secs(60)).await;
+
+                // monitoring interveal should be configurable
+                task::sleep(Duration::from_secs(mon_self.config.monitoring_interveal)).await;
+
+                let mut local_instances = Vec::new();
+                let node_fdus_instances = self
+                    .connector
+                    .global
+                    .get_node_instances(node_uuid)
+                    .await
+                    .unwrap();
+
+                for i in node_fdus_instances {
+                    log::trace!("Node FDU: {}", i.uuid);
+                    if let Ok(desc) = self.connector.global.get_fdu(i.fdu_uuid).await {
+                        if desc.hypervisor == *"bare" {
+                            local_instances.push(i)
+                        }
+                    }
+                }
+
+                fn find_process(pid: u32) -> FResult<Process> {
+                    let mut processes = processes().unwrap();
+                    let find = processes
+                        .into_iter()
+                        .find(|p| p.as_ref().unwrap().pid() == pid);
+                    if let Some(p) = find {
+                        match p {
+                            Ok(p) => {
+                                return Ok(p);
+                            }
+                            Err(ProcessError::NoSuchProcess { pid }) => {
+                                log::error!("Process {} not found", pid);
+                                return Err(FError::NotFound);
+                            }
+                            Err(ProcessError::ZombieProcess { pid }) => {
+                                log::error!("Process {} is zombie!", pid);
+                                return Err(FError::NotFound);
+                            }
+                            Err(ProcessError::AccessDenied { pid }) => {
+                                log::error!("Access denined for process {}", pid);
+                                return Err(FError::NotFound);
+                            }
+                            Err(ProcessError::PsutilError { pid, source }) => {
+                                log::error!("Psutil got error {:?} for PID {}", source, pid);
+                                return Err(FError::NotFound);
+                            }
+                        }
+                    }
+                    Err(FError::NotFound)
+                }
+
+                log::trace!("Local Instances: {:?}", local_instances);
+
+                for mut i in local_instances {
+                    if let Some(hv_specific) = i.clone().hypervisor_specific {
+                        let mut hv_specific =
+                            deserialize_ros2_specific_info(&hv_specific.as_slice()).unwrap();
+
+                        match i.status {
+                            FDUState::RUNNING => {
+                                log::trace!("State of FDU is expected running");
+                                if let Ok(process) = find_process(hv_specific.pid) {
+                                    match process.status().unwrap() {
+                                        ProcessStatus::Running
+                                        | ProcessStatus::Idle
+                                        | ProcessStatus::Sleeping => {
+                                            log::trace!(
+                                                "Process is running, status is coherent..."
+                                            );
+                                        }
+                                        _ => {
+                                            log::error!("FDU Instance {} is not running", i.uuid);
+                                            // Here we try to recover.
+                                            if mon_self.try_restart(i.clone()).await.is_ok() {
+                                                log::trace!("FDU re-started correctly");
+                                            } else {
+                                                log::trace!("Unable to restart FDU {}", i.uuid);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    log::trace!(
+                                        "Unable to find the process {} for the instance",
+                                        hv_specific.pid
+                                    );
+                                    // Here we try to recover.
+                                    if mon_self.try_restart(i.clone()).await.is_ok() {
+                                        log::trace!("FDU re-started correctly");
+                                    } else {
+                                        log::trace!("Unable to restart FDU {}", i.uuid);
+                                    }
+                                }
+                            }
+                            FDUState::DEFINED => {
+                                log::trace!("State of FDU is expected defined");
+                            }
+                            FDUState::CONFIGURED => {
+                                log::trace!("State of FDU is expected configured");
+                            }
+                            FDUState::ERROR(e) => {
+                                log::error!("State of FDU is error: {}", e);
+                            }
+                        }
+                    } else {
+                        log::trace!("FDU {} has no hypervisor specific info", i.uuid);
+                    }
+                }
             }
         };
 
@@ -757,6 +869,42 @@ impl ROS2Hypervisor {
 
         log::info!("DummyHypervisor main loop exiting");
         Ok(())
+    }
+
+    async fn try_reclean(&mut self, mut instance: FDURecord) -> FResult<Uuid> {
+        let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
+        instance.status = FDUState::ERROR("FDU not clean!".to_string());
+        self.connector
+            .global
+            .add_node_instance(node_uuid, &instance)
+            .await;
+
+        // then we try to start the fdu.
+        Ok(self.clean_fdu(instance.uuid).await?)
+    }
+
+    async fn try_reconfigure(&mut self, mut instance: FDURecord) -> FResult<Uuid> {
+        let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
+        instance.status = FDUState::ERROR("FDU not configured!".to_string());
+        self.connector
+            .global
+            .add_node_instance(node_uuid, &instance)
+            .await;
+
+        // then we try to start the fdu.
+        Ok(self.configure_fdu(instance.uuid).await?)
+    }
+
+    async fn try_restart(&mut self, mut instance: FDURecord) -> FResult<Uuid> {
+        let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
+        instance.status = FDUState::ERROR("FDU not running!".to_string());
+        self.connector
+            .global
+            .add_node_instance(node_uuid, &instance)
+            .await;
+
+        // then we try to start the fdu.
+        Ok(self.start_fdu(instance.uuid).await?)
     }
 
     pub async fn start(

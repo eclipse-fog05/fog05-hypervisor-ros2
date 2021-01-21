@@ -95,10 +95,10 @@ pub fn serialize_ros2_specific_info(data: &ROS2HVSpecificInfo) -> FResult<Vec<u8
 }
 
 pub fn deserialize_ros2_specific_info(raw_data: &[u8]) -> FResult<ROS2HVSpecificInfo> {
-    Ok(serde_json::from_str::<ROS2HVSpecificInfo>(
+    serde_json::from_str::<ROS2HVSpecificInfo>(
         std::str::from_utf8(raw_data).map_err(|e| FError::HypervisorError(format!("{}", e)))?,
     )
-    .map_err(|e| FError::HypervisorError(format!("{}", e)))?)
+    .map_err(|e| FError::HypervisorError(format!("{}", e)))
 }
 
 pub fn serialize_ros2_specific_descriptor(data: &ROS2HVSpecificDescriptor) -> FResult<Vec<u8>> {
@@ -108,10 +108,10 @@ pub fn serialize_ros2_specific_descriptor(data: &ROS2HVSpecificDescriptor) -> FR
 }
 
 pub fn deserialize_ros2_specific_descriptor(raw_data: &[u8]) -> FResult<ROS2HVSpecificDescriptor> {
-    Ok(serde_json::from_str::<ROS2HVSpecificDescriptor>(
+    serde_json::from_str::<ROS2HVSpecificDescriptor>(
         std::str::from_utf8(raw_data).map_err(|e| FError::HypervisorError(format!("{}", e)))?,
     )
-    .map_err(|e| FError::HypervisorError(format!("{}", e)))?)
+    .map_err(|e| FError::HypervisorError(format!("{}", e)))
 }
 
 pub fn serialize_plugin_config(data: &ROS2HVConfig) -> FResult<Vec<u8>> {
@@ -121,8 +121,8 @@ pub fn serialize_plugin_config(data: &ROS2HVConfig) -> FResult<Vec<u8>> {
 }
 
 pub fn deserialize_plugin_config(raw_data: &[u8]) -> FResult<ROS2HVConfig> {
-    Ok(serde_yaml::from_str::<ROS2HVConfig>(
+    serde_yaml::from_str::<ROS2HVConfig>(
         std::str::from_utf8(raw_data).map_err(|e| FError::HypervisorError(format!("{}", e)))?,
     )
-    .map_err(|e| FError::HypervisorError(format!("{}", e)))?)
+    .map_err(|e| FError::HypervisorError(format!("{}", e)))
 }
