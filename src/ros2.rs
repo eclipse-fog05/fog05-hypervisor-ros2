@@ -239,11 +239,6 @@ impl HypervisorPlugin for ROS2Hypervisor {
 
                 let mut interfaces: Vec<FDURecordInterface> = Vec::new();
 
-                // This is to be sure the ns-manager is already up on the networking
-                //TODO the zrpc should check with a timeout if the service is up,
-                // and return error only if it is not present
-                task::sleep(Duration::from_millis(1000)).await;
-
                 let mut cps: HashMap<String, FDURecordConnectionPoint> = HashMap::new();
 
                 //Creating just an interface to be attached to the default vnet
@@ -282,11 +277,14 @@ impl HypervisorPlugin for ROS2Hypervisor {
                         .await??;
 
                     // Getting address with DHCP
-                    self.net
-                        .as_ref()
-                        .unwrap()
-                        .assing_address_to_interface(viface.uuid, None)
-                        .await??;
+                    let net_client = self.net.as_ref().unwrap().clone();
+                    let face_uuid = viface.uuid;
+                    task::spawn(async move {
+                        let r = net_client
+                            .assing_address_to_interface(face_uuid, None)
+                            .await;
+                        log::trace!("Assign address result: {:?}", r);
+                    });
 
                     let fdu_intf = FDURecordInterface {
                         name: "eth0".to_string(),
