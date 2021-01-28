@@ -75,10 +75,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
         log::trace!("Add instance to local state");
         guard.fdus.insert(instance_uuid, instance.clone());
         log::trace!("Add instance in zenoh");
-        self.connector
-            .global
-            .add_node_instance(node_uuid, &instance)
-            .await?;
+        self.connector.local.add_instance(&instance).await?;
         log::debug!("Instance status {:?}", instance.status);
         Ok(instance)
     }
@@ -86,19 +83,12 @@ impl HypervisorPlugin for ROS2Hypervisor {
     async fn undefine_fdu(&mut self, instance_uuid: Uuid) -> FResult<Uuid> {
         log::debug!("Undefine FDU {:?}", instance_uuid);
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
-        let instance = self
-            .connector
-            .global
-            .get_node_instance(node_uuid, instance_uuid)
-            .await?;
+        let instance = self.connector.local.get_instance(instance_uuid).await?;
         match instance.status {
             FDUState::DEFINED | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await;
                 guard.fdus.remove(&instance_uuid);
-                self.connector
-                    .global
-                    .remove_node_instance(node_uuid, instance_uuid)
-                    .await?;
+                self.connector.local.remove_instance(instance_uuid).await?;
                 log::debug!("Instance status {} undefined", instance_uuid);
                 Ok(instance_uuid)
             }
@@ -111,11 +101,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
         log::trace!("Get node UUID");
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
         log::trace!("Get instance");
-        let mut instance = self
-            .connector
-            .global
-            .get_node_instance(node_uuid, instance_uuid)
-            .await?;
+        let mut instance = self.connector.local.get_instance(instance_uuid).await?;
         log::trace!("Check FDU status: {:?}", instance.status);
         match instance.status {
             FDUState::DEFINED | FDUState::ERROR(_) => {
@@ -375,10 +361,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 instance.interfaces = interfaces;
                 instance.connection_points = cps.into_iter().map(|(_, v)| v).collect();
                 instance.status = FDUState::CONFIGURED;
-                self.connector
-                    .global
-                    .add_node_instance(node_uuid, &instance)
-                    .await?;
+                self.connector.local.add_instance(&instance).await?;
                 log::debug!("Instance status {:?}", instance.status);
                 guard.fdus.insert(instance_uuid, instance);
                 Ok(instance_uuid)
@@ -390,11 +373,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
     async fn clean_fdu(&mut self, instance_uuid: Uuid) -> FResult<Uuid> {
         log::debug!("Clean FDU {:?}", instance_uuid);
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
-        let mut instance = self
-            .connector
-            .global
-            .get_node_instance(node_uuid, instance_uuid)
-            .await?;
+        let mut instance = self.connector.local.get_instance(instance_uuid).await?;
         match instance.status {
             FDUState::CONFIGURED | FDUState::ERROR(_) => {
                 let mut guard = self.fdus.write().await;
@@ -494,10 +473,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 instance.interfaces = Vec::new();
                 instance.connection_points = Vec::new();
                 instance.status = FDUState::DEFINED;
-                self.connector
-                    .global
-                    .add_node_instance(node_uuid, &instance)
-                    .await?;
+                self.connector.local.add_instance(&instance).await?;
                 log::debug!("Instance status {:?}", instance.status);
                 guard.fdus.insert(instance_uuid, instance);
 
@@ -510,11 +486,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
     async fn start_fdu(&mut self, instance_uuid: Uuid) -> FResult<Uuid> {
         log::debug!("Start FDU {:?}", instance_uuid);
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
-        let mut instance = self
-            .connector
-            .global
-            .get_node_instance(node_uuid, instance_uuid)
-            .await?;
+        let mut instance = self.connector.local.get_instance(instance_uuid).await?;
         log::trace!("Instance status {:?}", instance.status);
         match instance.status {
             FDUState::CONFIGURED | FDUState::ERROR(_) => {
@@ -608,10 +580,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 }
 
                 instance.status = FDUState::RUNNING;
-                self.connector
-                    .global
-                    .add_node_instance(node_uuid, &instance)
-                    .await?;
+                self.connector.local.add_instance(&instance).await?;
                 guard
                     .childs
                     .insert(instance_uuid, Arc::new(Mutex::new(child)));
@@ -641,11 +610,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
     async fn stop_fdu(&mut self, instance_uuid: Uuid) -> FResult<Uuid> {
         log::debug!("Stop instance {:?}", instance_uuid);
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
-        let mut instance = self
-            .connector
-            .global
-            .get_node_instance(node_uuid, instance_uuid)
-            .await?;
+        let mut instance = self.connector.local.get_instance(instance_uuid).await?;
         log::trace!("Instance status {:?}", instance.status);
         match instance.status {
             FDUState::RUNNING | FDUState::ERROR(_) => {
@@ -679,10 +644,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
 
                 instance.hypervisor_specific = Some(serialize_ros2_specific_info(&hv_specific)?);
 
-                self.connector
-                    .global
-                    .add_node_instance(node_uuid, &instance)
-                    .await?;
+                self.connector.local.add_instance(&instance).await?;
 
                 log::trace!("Instance status {:?}", instance.status);
                 guard.fdus.insert(instance_uuid, instance);
@@ -699,10 +661,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
 
     async fn get_fdu_status(&self, instance_uuid: Uuid) -> FResult<FDURecord> {
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
-        self.connector
-            .global
-            .get_node_instance(node_uuid, instance_uuid)
-            .await
+        self.connector.local.get_instance(instance_uuid).await
     }
 }
 
@@ -744,12 +703,7 @@ impl ROS2Hypervisor {
                 task::sleep(Duration::from_secs(mon_self.config.monitoring_interveal)).await;
 
                 let mut local_instances = Vec::new();
-                let node_fdus_instances = self
-                    .connector
-                    .global
-                    .get_node_instances(node_uuid)
-                    .await
-                    .unwrap();
+                let node_fdus_instances = self.connector.local.get_all_instances().await.unwrap();
 
                 for i in node_fdus_instances {
                     log::trace!("Node FDU: {}", i.uuid);
@@ -872,10 +826,7 @@ impl ROS2Hypervisor {
     async fn try_reclean(&mut self, mut instance: FDURecord) -> FResult<Uuid> {
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
         instance.status = FDUState::ERROR("FDU not clean!".to_string());
-        self.connector
-            .global
-            .add_node_instance(node_uuid, &instance)
-            .await;
+        self.connector.local.add_instance(&instance).await;
 
         // then we try to start the fdu.
         Ok(self.clean_fdu(instance.uuid).await?)
@@ -884,10 +835,7 @@ impl ROS2Hypervisor {
     async fn try_reconfigure(&mut self, mut instance: FDURecord) -> FResult<Uuid> {
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
         instance.status = FDUState::ERROR("FDU not configured!".to_string());
-        self.connector
-            .global
-            .add_node_instance(node_uuid, &instance)
-            .await;
+        self.connector.local.add_instance(&instance).await;
 
         // then we try to start the fdu.
         Ok(self.configure_fdu(instance.uuid).await?)
@@ -896,10 +844,7 @@ impl ROS2Hypervisor {
     async fn try_restart(&mut self, mut instance: FDURecord) -> FResult<Uuid> {
         let node_uuid = self.agent.as_ref().unwrap().get_node_uuid().await??;
         instance.status = FDUState::ERROR("FDU not running!".to_string());
-        self.connector
-            .global
-            .add_node_instance(node_uuid, &instance)
-            .await;
+        self.connector.local.add_instance(&instance).await;
 
         // then we try to start the fdu.
         Ok(self.start_fdu(instance.uuid).await?)
