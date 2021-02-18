@@ -10,6 +10,8 @@
 * Contributors:
 *   ADLINK fog05 team, <fog05@adlink-labs.tech>
 *********************************************************************************/
+#![allow(clippy::upper_case_acronyms)]
+
 use std::collections::HashMap;
 use std::env;
 use std::process;

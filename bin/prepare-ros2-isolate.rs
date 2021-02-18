@@ -208,9 +208,9 @@ fn main() {
                     let my_pid = process::id();
 
                     let signals = Signals::new(&[
-                        signal_hook::SIGTERM,
-                        signal_hook::SIGINT,
-                        signal_hook::SIGQUIT,
+                        signal_hook::consts::SIGTERM,
+                        signal_hook::consts::SIGINT,
+                        signal_hook::consts::SIGQUIT,
                     ])
                     .unwrap();
 
@@ -219,7 +219,9 @@ fn main() {
                     let mut signals = signals.fuse();
                     if let Some(signal) = signals.next().await {
                         match signal {
-                            signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+                            signal_hook::consts::SIGTERM
+                            | signal_hook::consts::SIGINT
+                            | signal_hook::consts::SIGQUIT => {
                                 log::trace!("Received stop signal closing...");
                             }
                             _ => unreachable!(),

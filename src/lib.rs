@@ -11,6 +11,7 @@
 *   ADLINK fog05 team, <fog05@adlink-labs.tech>
 *********************************************************************************/
 #![allow(unused_variables)]
+#![allow(clippy::upper_case_acronyms)]
 
 pub mod ros2;
 pub mod types;
