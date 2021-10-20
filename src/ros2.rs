@@ -31,11 +31,11 @@ use psutil::process::{processes, Process, ProcessError, Status as ProcessStatus}
 use znrpc_macros::znserver;
 use zrpc::ZNServe;
 
-use fog05_sdk::agent::{AgentPluginInterfaceClient, OSClient};
+use fog05_sdk::agent::{plugin::AgentPluginInterfaceClient, os::OSClient};
 use fog05_sdk::fresult::{FError, FResult};
 use fog05_sdk::im::fdu::*;
 use fog05_sdk::im::fdu::{FDUDescriptor, FDURecord, FDUState};
-use fog05_sdk::plugins::{HypervisorPlugin, NetworkingPluginClient};
+use fog05_sdk::plugins::{hypervisor::HypervisorPlugin, networking::NetworkingPluginClient};
 use fog05_sdk::types::PluginKind;
 
 use uuid::Uuid;

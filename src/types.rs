@@ -22,10 +22,10 @@ use std::process::Child;
 
 use async_std::sync::{Arc, Mutex, RwLock};
 
-use fog05_sdk::agent::{AgentPluginInterfaceClient, OSClient};
+use fog05_sdk::agent::{plugin::AgentPluginInterfaceClient, os::OSClient};
 use fog05_sdk::fresult::{FError, FResult};
 use fog05_sdk::im::fdu::*;
-use fog05_sdk::plugins::NetworkingPluginClient;
+use fog05_sdk::plugins::networking::NetworkingPluginClient;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
