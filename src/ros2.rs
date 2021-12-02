@@ -14,24 +14,24 @@
 #![allow(unused_variables)]
 #![allow(unused_mut)]
 
+use async_std::prelude::*;
+use async_std::sync::{Arc, Mutex};
+use async_std::task;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fs::File;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex};
-use async_std::task;
-
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 
-use psutil::process::{processes, Process, ProcessError, Status as ProcessStatus};
+use sysinfo::{Process, ProcessExt, ProcessStatus, System, SystemExt};
 
 use znrpc_macros::znserver;
 use zrpc::ZNServe;
 
-use fog05_sdk::agent::{plugin::AgentPluginInterfaceClient, os::OSClient};
+use fog05_sdk::agent::{os::OSClient, plugin::AgentPluginInterfaceClient};
 use fog05_sdk::fresult::{FError, FResult};
 use fog05_sdk::im::fdu::*;
 use fog05_sdk::im::fdu::{FDUDescriptor, FDURecord, FDUState};
@@ -571,7 +571,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 let child = cmd.spawn()?;
                 log::debug!("Child PID {}", child.id());
 
-                hv_specific.pid = child.id();
+                hv_specific.pid = child.id().try_into().unwrap();
 
                 instance.hypervisor_specific = Some(serialize_ros2_specific_info(&hv_specific)?);
 
@@ -714,35 +714,18 @@ impl ROS2Hypervisor {
                     }
                 }
 
-                fn find_process(pid: u32) -> FResult<Process> {
-                    let mut processes = processes().unwrap();
-                    let find = processes
-                        .into_iter()
-                        .find(|p| p.as_ref().unwrap().pid() == pid);
-                    if let Some(p) = find {
-                        match p {
-                            Ok(p) => {
-                                return Ok(p);
+                fn find_process(pid: i32) -> FResult<Process> {
+                    let s = System::new_all();
+
+                    match s.process(pid) {
+                        Some(p) => match p.status() {
+                            ProcessStatus::Run | ProcessStatus::Idle | ProcessStatus::Sleep => {
+                                Ok(p.clone())
                             }
-                            Err(ProcessError::NoSuchProcess { pid }) => {
-                                log::error!("Process {} not found", pid);
-                                return Err(FError::NotFound);
-                            }
-                            Err(ProcessError::ZombieProcess { pid }) => {
-                                log::error!("Process {} is zombie!", pid);
-                                return Err(FError::NotFound);
-                            }
-                            Err(ProcessError::AccessDenied { pid }) => {
-                                log::error!("Access denined for process {}", pid);
-                                return Err(FError::NotFound);
-                            }
-                            Err(ProcessError::PsutilError { pid, source }) => {
-                                log::error!("Psutil got error {:?} for PID {}", source, pid);
-                                return Err(FError::NotFound);
-                            }
-                        }
+                            _ => Ok(p.clone()),
+                        },
+                        None => Err(FError::NotFound),
                     }
-                    Err(FError::NotFound)
                 }
 
                 log::trace!("Local Instances: {:?}", local_instances);
@@ -756,10 +739,10 @@ impl ROS2Hypervisor {
                             FDUState::RUNNING => {
                                 log::trace!("State of FDU is expected running");
                                 if let Ok(process) = find_process(hv_specific.pid) {
-                                    match process.status().unwrap() {
-                                        ProcessStatus::Running
+                                    match process.status() {
+                                        ProcessStatus::Run
                                         | ProcessStatus::Idle
-                                        | ProcessStatus::Sleeping => {
+                                        | ProcessStatus::Sleep => {
                                             log::trace!(
                                                 "Process is running, status is coherent..."
                                             );

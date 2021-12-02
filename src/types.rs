@@ -22,7 +22,7 @@ use std::process::Child;
 
 use async_std::sync::{Arc, Mutex, RwLock};
 
-use fog05_sdk::agent::{plugin::AgentPluginInterfaceClient, os::OSClient};
+use fog05_sdk::agent::{os::OSClient, plugin::AgentPluginInterfaceClient};
 use fog05_sdk::fresult::{FError, FResult};
 use fog05_sdk::im::fdu::*;
 use fog05_sdk::plugins::networking::NetworkingPluginClient;
@@ -44,7 +44,7 @@ pub struct ROS2HVConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ROS2HVSpecificInfo {
     //pub netns: Uuid,
-    pub pid: u32,
+    pub pid: i32,
     pub env: HashMap<String, String>,
     pub instance_path: String,
     pub image_folder: Option<String>,
