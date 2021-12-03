@@ -118,7 +118,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                     .await??;
 
                 let hv_info = deserialize_ros2_specific_descriptor(
-                    &descriptor
+                    descriptor
                         .hypervisor_specific
                         .unwrap()
                         .into_bytes()
@@ -379,7 +379,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 let mut guard = self.fdus.write().await;
 
                 let mut hv_specific = deserialize_ros2_specific_info(
-                    &instance.clone().hypervisor_specific.unwrap().as_slice(),
+                    instance.clone().hypervisor_specific.unwrap().as_slice(),
                 )?;
 
                 let descriptor = self
@@ -504,7 +504,7 @@ impl HypervisorPlugin for ROS2Hypervisor {
                 )?;
 
                 let mut hv_specific = deserialize_ros2_specific_info(
-                    &instance.clone().hypervisor_specific.unwrap().as_slice(),
+                    instance.clone().hypervisor_specific.unwrap().as_slice(),
                 )?;
 
                 let mut cmd = if cfg!(feature = "isolation") {
@@ -714,15 +714,13 @@ impl ROS2Hypervisor {
                     }
                 }
 
-                fn find_process(pid: i32) -> FResult<Process> {
-                    let s = System::new_all();
-
+                fn find_process(s: &System, pid: i32) -> FResult<&Process> {
                     match s.process(pid) {
                         Some(p) => match p.status() {
                             ProcessStatus::Run | ProcessStatus::Idle | ProcessStatus::Sleep => {
-                                Ok(p.clone())
+                                Ok(p)
                             }
-                            _ => Ok(p.clone()),
+                            _ => Ok(p),
                         },
                         None => Err(FError::NotFound),
                     }
@@ -733,12 +731,13 @@ impl ROS2Hypervisor {
                 for mut i in local_instances {
                     if let Some(hv_specific) = i.clone().hypervisor_specific {
                         let mut hv_specific =
-                            deserialize_ros2_specific_info(&hv_specific.as_slice()).unwrap();
+                            deserialize_ros2_specific_info(hv_specific.as_slice()).unwrap();
 
                         match i.status {
                             FDUState::RUNNING => {
                                 log::trace!("State of FDU is expected running");
-                                if let Ok(process) = find_process(hv_specific.pid) {
+                                let s = System::new_all();
+                                if let Ok(process) = find_process(&s, hv_specific.pid) {
                                     match process.status() {
                                         ProcessStatus::Run
                                         | ProcessStatus::Idle

@@ -69,8 +69,7 @@ async fn main() {
 
     let conf_file_path = Path::new(&args.config);
     let config =
-        deserialize_plugin_config(&(read_file(&conf_file_path).await.into_bytes().as_slice()))
-            .unwrap();
+        deserialize_plugin_config(read_file(conf_file_path).await.into_bytes().as_slice()).unwrap();
 
     let properties = format!("mode=client;peer={}", config.zlocator.clone());
     let zproperties = Properties::from(properties);
